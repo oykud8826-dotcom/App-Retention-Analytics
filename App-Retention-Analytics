@@ -1,0 +1,98 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import datetime as dt
+
+# Set visual style
+sns.set(style="white")
+
+def generate_user_data(n_users=1000):
+    """
+    Simulates app subscription data: Sign-up date and Last Active date.
+    This creates the base for Churn/Retention analysis.
+    """
+    start_date = dt.datetime(2024, 1, 1)
+    dates = [start_date + dt.timedelta(days=x) for x in range(365)]
+    
+    # Random sign-up dates
+    signup_dates = np.random.choice(dates, n_users)
+    
+    # Random 'Lifetime' (How many days they stayed)
+    # Most users leave early (Churn), some stay long (Loyal)
+    lifetimes = np.random.exponential(scale=60, size=n_users).astype(int) 
+    
+    data = {
+        'User_ID': np.arange(1, n_users + 1),
+        'Signup_Date': signup_dates,
+        'Lifetime_Days': lifetimes
+    }
+    
+    df = pd.DataFrame(data)
+    df['Last_Active_Date'] = df['Signup_Date'] + pd.to_timedelta(df['Lifetime_Days'], unit='D')
+    
+    return df
+
+def get_cohort_matrix(df):
+    """
+    Transforms raw data into a Cohort Matrix (The most technical part).
+    Logic: Group users by 'Signup Month' and track them over 'Activity Months'.
+    """
+    # Extract Month from dates
+    df['Cohort_Month'] = df['Signup_Date'].dt.to_period('M')
+    df['Churn_Month'] = df['Last_Active_Date'].dt.to_period('M')
+    
+    # We will simulate retention: Check if user was active in subsequent months
+    # (Simplified logic for demonstration)
+    
+    # Create a Pivot Table structure
+    # Rows: Cohort (Sign-up Month), Columns: Months passed since sign-up
+    cohort_data = []
+    
+    for month_offset in range(13): # Track for 12 months
+        temp_df = df.copy()
+        # A user is 'retained' if their lifetime covers the offset month
+        temp_df['Is_Active'] = temp_df['Lifetime_Days'] > (month_offset * 30)
+        
+        retention_rate = temp_df.groupby('Cohort_Month')['Is_Active'].mean()
+        cohort_data.append(retention_rate)
+        
+    cohort_df = pd.concat(cohort_data, axis=1)
+    cohort_df.columns = [f'Month {i}' for i in range(13)]
+    
+    return cohort_df
+
+def plot_retention_heatmap(cohort_df):
+    """
+    Visualizes the matrix as a Heatmap. 
+    This is the exact chart Product Managers look at every week.
+    """
+    plt.figure(figsize=(12, 8))
+    
+    # Convert to percentage for readability
+    sns.heatmap(cohort_df, annot=True, fmt='.0%', cmap='YlGnBu', vmin=0.0, vmax=1.0)
+    
+    plt.title('User Retention Cohort Analysis (2024)', fontsize=16)
+    plt.xlabel('Months Since Sign-up', fontsize=12)
+    plt.ylabel('Cohort (Sign-up Month)', fontsize=12)
+    plt.yticks(rotation=0)
+    
+    plt.tight_layout()
+    plt.savefig('retention_heatmap.png')
+    print("\n[INFO] Retention Heatmap saved as 'retention_heatmap.png'")
+    # plt.show()
+
+if __name__ == "__main__":
+    print("--- Starting Product Analytics Pipeline ---")
+    
+    # 1. Generate Data
+    user_df = generate_user_data(n_users=2000)
+    print(f"[DATA] Generated {len(user_df)} users.")
+    
+    # 2. Process Cohorts
+    print("[ANALYSIS] Calculating Cohort Retention Rates...")
+    cohort_matrix = get_cohort_matrix(user_df)
+    
+    # 3. Visualize
+    plot_retention_heatmap(cohort_matrix)
+    print("--- Analysis Completed ---")
